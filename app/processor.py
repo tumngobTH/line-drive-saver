@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from dataclasses import dataclass
 
@@ -16,6 +17,9 @@ MIME_BY_TYPE = {
     "audio": "audio/m4a",
     "file": "application/octet-stream",
 }
+
+_inflight: set[str] = set()
+_inflight_lock = asyncio.Lock()
 
 
 @dataclass
@@ -48,31 +52,42 @@ async def process_media_event(event, deps: Deps) -> None:
     message = event.message
     msg_type = message.type
     message_id = message.id
-    try:
-        folder_id = await _ensure_folder(source, deps)
-        if deps.drive.exists_message(folder_id, message_id):
-            logger.info("Skip duplicate %s in %s", message_id, source_id)
+
+    async with _inflight_lock:
+        if message_id in _inflight:
+            logger.info("Already processing %s; skip", message_id)
             return
-        original = getattr(message, "file_name", None)
-        base = naming.build_filename(msg_type, event.timestamp, original_name=original)
-        existing = deps.drive.list_names_in_folder(folder_id)
-        filename = naming.resolve_unique(base, existing)
-        data = deps.line.download_content(message_id)
-        deps.drive.upload(
-            folder_id=folder_id,
-            filename=filename,
-            data=data,
-            mime_type=MIME_BY_TYPE.get(msg_type, "application/octet-stream"),
-            message_id=message_id,
-            source_id=source_id,
-        )
-        logger.info("Saved %s as %s", message_id, filename)
-    except Exception:  # noqa: BLE001 — report to chat, never crash the worker
-        logger.exception("Failed to save %s", message_id)
+        _inflight.add(message_id)
+
+    try:
         try:
-            deps.line.push_text(source_id, "⚠️ บันทึกไฟล์ลง Drive ไม่สำเร็จ กรุณาลองส่งใหม่อีกครั้ง")
-        except Exception:
-            logger.exception("Failed to push error notice")
+            folder_id = await _ensure_folder(source, deps)
+            if deps.drive.exists_message(folder_id, message_id):
+                logger.info("Skip duplicate %s in %s", message_id, source_id)
+                return
+            original = getattr(message, "file_name", None)
+            base = naming.build_filename(msg_type, event.timestamp, original_name=original)
+            existing = deps.drive.list_names_in_folder(folder_id)
+            filename = naming.resolve_unique(base, existing)
+            data = deps.line.download_content(message_id)
+            deps.drive.upload(
+                folder_id=folder_id,
+                filename=filename,
+                data=data,
+                mime_type=MIME_BY_TYPE.get(msg_type, "application/octet-stream"),
+                message_id=message_id,
+                source_id=source_id,
+            )
+            logger.info("Saved %s as %s", message_id, filename)
+        except Exception:  # noqa: BLE001 — report to chat, never crash the worker
+            logger.exception("Failed to save %s", message_id)
+            try:
+                deps.line.push_text(source_id, "⚠️ บันทึกไฟล์ลง Drive ไม่สำเร็จ กรุณาลองส่งใหม่อีกครั้ง")
+            except Exception:
+                logger.exception("Failed to push error notice")
+    finally:
+        async with _inflight_lock:
+            _inflight.discard(message_id)
 
 
 async def handle_command_event(verb: str, arg: str, source, deps: Deps) -> None:

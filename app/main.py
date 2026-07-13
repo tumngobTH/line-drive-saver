@@ -25,6 +25,14 @@ class _State:
 
 state = _State()
 
+_background_tasks: set = set()
+
+
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
 
 @app.on_event("startup")
 def _startup() -> None:
@@ -54,14 +62,12 @@ def _dispatch(events) -> None:
             continue
         msg_type = event.message.type
         if msg_type in MEDIA_TYPES:
-            asyncio.create_task(process_media_event(event, state.deps))
+            _spawn(process_media_event(event, state.deps))
         elif msg_type == "text":
             parsed = parse_command(event.message.text)
             if parsed:
                 verb, arg = parsed
-                asyncio.create_task(
-                    handle_command_event(verb, arg, event.source, state.deps)
-                )
+                _spawn(handle_command_event(verb, arg, event.source, state.deps))
 
 
 @app.post("/callback")

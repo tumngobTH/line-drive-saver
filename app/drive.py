@@ -8,8 +8,11 @@ from googleapiclient.http import MediaInMemoryUpload, MediaIoBaseDownload
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 FOLDER_MIME = "application/vnd.google-apps.folder"
 
-# Flags required for every call that touches a Shared Drive.
-_SHARED = {"supportsAllDrives": True, "includeItemsFromAllDrives": True}
+# supportsAllDrives is valid on ALL file operations; includeItemsFromAllDrives
+# is ONLY valid on files.list. Splitting them avoids a TypeError on
+# create / update / get_media.
+_WRITE = {"supportsAllDrives": True}
+_LIST = {"supportsAllDrives": True, "includeItemsFromAllDrives": True}
 
 
 def build_service(credentials_path: str):
@@ -35,7 +38,7 @@ class DriveStore:
             "fields": fields,
             "corpora": "drive",
             "driveId": self.shared_drive_id,
-            **_SHARED,
+            **_LIST,
         }
 
     def ensure_folder(self, name: str, parent_id: str) -> str:
@@ -52,13 +55,13 @@ class DriveStore:
         created = self.service.files().create(
             body={"name": name, "mimeType": FOLDER_MIME, "parents": [parent_id]},
             fields="id",
-            **_SHARED,
+            **_WRITE,
         ).execute()
         return created["id"]
 
     def rename_folder(self, folder_id: str, new_name: str) -> None:
         self.service.files().update(
-            fileId=folder_id, body={"name": new_name}, fields="id", **_SHARED
+            fileId=folder_id, body={"name": new_name}, fields="id", **_WRITE
         ).execute()
 
     def list_names_in_folder(self, folder_id: str) -> set[str]:
@@ -96,7 +99,7 @@ class DriveStore:
             },
             media_body=media,
             fields="id",
-            **_SHARED,
+            **_WRITE,
         ).execute()
         return created["id"]
 
@@ -115,7 +118,7 @@ class DriveStore:
         file_id = self._find_mapping_file_id(filename)
         if not file_id:
             return {}
-        request = self.service.files().get_media(fileId=file_id, **_SHARED)
+        request = self.service.files().get_media(fileId=file_id, **_WRITE)
         buffer = io.BytesIO()
         downloader = MediaIoBaseDownload(buffer, request)
         done = False
@@ -129,12 +132,12 @@ class DriveStore:
         file_id = self._find_mapping_file_id(filename)
         if file_id:
             self.service.files().update(
-                fileId=file_id, media_body=media, fields="id", **_SHARED
+                fileId=file_id, media_body=media, fields="id", **_WRITE
             ).execute()
         else:
             self.service.files().create(
                 body={"name": filename, "parents": [self.root_folder_id]},
                 media_body=media,
                 fields="id",
-                **_SHARED,
+                **_WRITE,
             ).execute()

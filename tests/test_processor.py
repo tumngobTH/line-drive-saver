@@ -84,3 +84,22 @@ async def test_handle_folder_command_renames_and_confirms():
     drive.rename_folder.assert_called_once_with("folder1", "New")
     assert mapping.folder_name_for("Cabc", fallback="x") == "New"
     line.push_text.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_process_media_skips_when_already_inflight():
+    from app import processor
+    mapping = Mapping({"Cabc": {"folderName": "P", "folderId": "folder1"}})
+    drive = MagicMock()
+    line = MagicMock()
+    ev = _media_event("image", "dup1", 1783931412000)
+
+    processor._inflight.add("dup1")  # simulate a concurrent in-flight delivery
+    try:
+        await process_media_event(ev, _deps(mapping, drive, line))
+    finally:
+        processor._inflight.discard("dup1")
+
+    drive.exists_message.assert_not_called()
+    drive.upload.assert_not_called()
+    line.download_content.assert_not_called()

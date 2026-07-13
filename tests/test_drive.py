@@ -52,3 +52,27 @@ def test_load_mapping_empty_when_no_file():
     service.files().list().execute.return_value = {"files": []}
     store = _store_with(service)
     assert store.load_mapping() == {}
+
+
+def _real_service():
+    from googleapiclient.discovery import build
+    from google.auth.credentials import AnonymousCredentials
+    return build("drive", "v3", credentials=AnonymousCredentials(),
+                 cache_discovery=False, static_discovery=False)
+
+
+def test_write_flags_are_accepted_by_real_client():
+    # Regression for the includeItemsFromAllDrives-on-create/update/get bug.
+    from app import drive
+    svc = _real_service()
+    # These construct the underlying HttpRequest; a bad kwarg raises TypeError here.
+    svc.files().create(body={"name": "x"}, fields="id", **drive._WRITE)
+    svc.files().update(fileId="1", body={"name": "x"}, fields="id", **drive._WRITE)
+    svc.files().get_media(fileId="1", **drive._WRITE)
+
+
+def test_list_flags_are_accepted_by_real_client():
+    from app import drive
+    svc = _real_service()
+    svc.files().list(q="x", fields="files(id)", corpora="drive",
+                     driveId="0A", **drive._LIST)
