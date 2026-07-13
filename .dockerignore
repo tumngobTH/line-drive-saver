@@ -1,0 +1,8 @@
+.venv/
+tests/
+docs/
+__pycache__/
+*.pyc
+.env
+service-account*.json
+.git/
