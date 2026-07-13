@@ -161,24 +161,24 @@ from app import naming
 
 
 def test_file_keeps_original_name_with_date_prefix():
-    # 2026-07-13 15:30:12 Asia/Bangkok == 1768293012000 ms
-    ts = 1768293012000
+    # 2026-07-13 15:30:12 Asia/Bangkok == 1783931412000 ms
+    ts = 1783931412000
     assert naming.build_filename("file", ts, original_name="Q2-report.pdf") == "20260713_Q2-report.pdf"
 
 
 def test_image_uses_date_time_type():
-    ts = 1768293012000
+    ts = 1783931412000
     assert naming.build_filename("image", ts) == "20260713_153012_image.jpg"
 
 
 def test_video_and_audio_extensions():
-    ts = 1768293012000
+    ts = 1783931412000
     assert naming.build_filename("video", ts) == "20260713_153012_video.mp4"
     assert naming.build_filename("audio", ts) == "20260713_153012_audio.m4a"
 
 
 def test_sanitize_strips_path_and_control_chars_but_keeps_thai():
-    ts = 1768293012000
+    ts = 1783931412000
     out = naming.build_filename("file", ts, original_name="../ใบเสร็จ\t/x.pdf")
     assert out == "20260713_..ใบเสร็จx.pdf"
 
@@ -851,7 +851,7 @@ async def test_process_media_creates_folder_and_uploads():
     line.get_group_summary_name.return_value = "ProjectX"
     line.download_content.return_value = b"bytes"
 
-    ev = _media_event("file", "m1", 1768293012000, file_name="Q2-report.pdf")
+    ev = _media_event("file", "m1", 1783931412000, file_name="Q2-report.pdf")
     await process_media_event(ev, _deps(mapping, drive, line))
 
     drive.ensure_folder.assert_called_once_with("ProjectX", "root1")
@@ -868,7 +868,7 @@ async def test_process_media_skips_duplicate():
     drive.exists_message.return_value = True
     line = MagicMock()
 
-    ev = _media_event("image", "m1", 1768293012000)
+    ev = _media_event("image", "m1", 1783931412000)
     await process_media_event(ev, _deps(mapping, drive, line))
 
     drive.upload.assert_not_called()
@@ -884,7 +884,7 @@ async def test_process_media_pushes_error_on_failure():
     line = MagicMock()
     line.download_content.side_effect = RuntimeError("boom")
 
-    ev = _media_event("image", "m1", 1768293012000)
+    ev = _media_event("image", "m1", 1783931412000)
     await process_media_event(ev, _deps(mapping, drive, line))
 
     line.push_text.assert_called_once()
