@@ -39,6 +39,12 @@ def _with_suffix(filename: str, n: int) -> str:
     return f"{filename}_{n}"
 
 
+def sidecar_name(filename: str) -> str:
+    """`<stem>.json` for a saved media filename (filename + .json if no extension)."""
+    stem, dot, _ext = filename.rpartition(".")
+    return f"{stem}.json" if dot else f"{filename}.json"
+
+
 def resolve_unique(name: str, existing) -> str:
     if name not in existing:
         return name

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
 
@@ -29,6 +30,35 @@ class Deps:
     line: object
     root_folder_id: str
     max_file_mb: int = 200
+    error_replies: bool = True
+    sidecar_json: bool = False
+
+
+def _write_sidecar(event, deps: Deps, folder_id: str, filename: str, existing) -> None:
+    """Upload `<stem>.json` next to the saved media file. Best-effort: the caller
+    logs failures and never lets them undo the media save."""
+    source = event.source
+    message = event.message
+    payload = {
+        "groupId": deps.line.group_id_of(source),
+        "userId": getattr(source, "user_id", None),
+        "messageId": message.id,
+        "sourceId": source_id_of(source),
+        "timestamp": event.timestamp,
+        "type": message.type,
+        "filename": filename,
+    }
+    # A media file named *.json would share the sidecar's name; keep them apart.
+    name = naming.resolve_unique(naming.sidecar_name(filename), set(existing) | {filename})
+    deps.drive.upload_bytes(
+        folder_id=folder_id,
+        filename=name,
+        data=json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+        mime_type="application/json",
+        # Deliberately NOT lineMessageId: exists_message() must key on the media file.
+        app_properties={"lineSidecarFor": message.id, "lineSourceId": source_id_of(source)},
+    )
+    logger.info("Saved sidecar %s for %s", name, message.id)
 
 
 async def _ensure_folder(source, deps: Deps) -> str:
@@ -79,12 +109,20 @@ async def process_media_event(event, deps: Deps) -> None:
                 source_id=source_id,
             )
             logger.info("Saved %s as %s", message_id, filename)
+            if deps.sidecar_json:
+                try:
+                    _write_sidecar(event, deps, folder_id, filename, existing)
+                except Exception:  # noqa: BLE001 — sidecar is best-effort; media is already saved
+                    logger.exception("Failed to write sidecar for %s", message_id)
         except Exception:  # noqa: BLE001 — report to chat, never crash the worker
             logger.exception("Failed to save %s", message_id)
-            try:
-                deps.line.push_text(source_id, "⚠️ บันทึกไฟล์ลง Drive ไม่สำเร็จ กรุณาลองส่งใหม่อีกครั้ง")
-            except Exception:
-                logger.exception("Failed to push error notice")
+            if not deps.error_replies:
+                logger.info("ERROR_REPLIES disabled; not notifying %s", source_id)
+            else:
+                try:
+                    deps.line.push_text(source_id, "⚠️ บันทึกไฟล์ลง Drive ไม่สำเร็จ กรุณาลองส่งใหม่อีกครั้ง")
+                except Exception:
+                    logger.exception("Failed to push error notice")
     finally:
         async with _inflight_lock:
             _inflight.discard(message_id)

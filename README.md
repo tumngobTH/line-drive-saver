@@ -55,3 +55,42 @@ Then set the channel webhook URL to `https://<cloud-run-url>/callback`.
 > `--no-cpu-throttling` keeps the CPU allocated so background upload tasks finish
 > after the 200 response. `--min/max-instances 1` pins to one instance so the
 > mapping JSON never has concurrent writers.
+
+## Sidecar JSON (opt-in: `SIDECAR_JSON=true`)
+When enabled, every saved media file gets a sibling `<same name>.json` in the same folder,
+e.g. `20260713_153012_image.jpg` + `20260713_153012_image.json`:
+```json
+{"groupId": "C...", "userId": "U...", "messageId": "…", "sourceId": "C...", "timestamp": 1783931412000,
+ "type": "image", "filename": "20260713_153012_image.jpg"}
+```
+It is written only after the media upload succeeds and is best-effort: a sidecar
+failure is logged and never undoes the save, and it is not retried (a LINE
+redelivery is de-duplicated on the media file), so consumers must tolerate a
+media file with no sidecar. Resolve the pair via `appProperties.lineSidecarFor`
+(= the media's `lineMessageId`) or the `filename` field inside the JSON — not
+by name alone: a media file that is itself named `*.json` gets a `_2` sidecar.
+Off by default so the original `line-drive-saver` service is unchanged.
+
+## Second service: line-slip-saver
+The slip-booking pipeline runs a **second Cloud Run service from this same code**,
+with its own LINE channel and its own Drive root. The existing `line-drive-saver`
+service is untouched.
+
+1. Create a new Messaging API channel (new secret + long-lived token); store
+   them as new secrets (e.g. `line-slip-secret`, `line-slip-token`).
+2. In the same Shared Drive, create a folder **`LINE Slips`** and note its id.
+3. Deploy with the slip-specific env:
+```bash
+gcloud run deploy line-slip-saver \
+  --source . \
+  --region asia-southeast1 \
+  --min-instances 1 --max-instances 1 \
+  --no-cpu-throttling \
+  --set-env-vars SHARED_DRIVE_ID=...,ROOT_FOLDER_ID=<LINE Slips folder id>,MAPPING_FILENAME=line-slip-mapping.json,ERROR_REPLIES=false,SIDECAR_JSON=true \
+  --set-secrets LINE_CHANNEL_SECRET=line-slip-secret:latest,LINE_CHANNEL_ACCESS_TOKEN=line-slip-token:latest,GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa.json:...
+```
+4. Set the new channel's webhook URL to `https://<line-slip-saver-url>/callback`
+   and add the bot to the client slip groups.
+
+`ERROR_REPLIES=false` makes the slip bot send **zero** outbound messages: save
+failures are only logged (Cloud Logging), never pushed to the chat.

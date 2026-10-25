@@ -47,6 +47,33 @@ def test_list_names_returns_set():
     assert store.list_names_in_folder("folder1") == {"a.pdf", "b.pdf"}
 
 
+def test_upload_bytes_passes_shared_drive_flag_and_properties():
+    service = MagicMock()
+    service.files().create().execute.return_value = {"id": "f1"}
+    store = _store_with(service)
+    out = store.upload_bytes(
+        folder_id="folder1", filename="a.json", data=b"{}",
+        mime_type="application/json", app_properties={"lineSidecarFor": "m1"},
+    )
+    assert out == "f1"
+    kwargs = service.files().create.call_args.kwargs
+    assert kwargs["supportsAllDrives"] is True
+    assert "includeItemsFromAllDrives" not in kwargs
+    assert kwargs["body"]["name"] == "a.json"
+    assert kwargs["body"]["parents"] == ["folder1"]
+    assert kwargs["body"]["appProperties"] == {"lineSidecarFor": "m1"}
+
+
+def test_upload_tags_line_message_id():
+    service = MagicMock()
+    service.files().create().execute.return_value = {"id": "f1"}
+    store = _store_with(service)
+    store.upload(folder_id="folder1", filename="a.jpg", data=b"x",
+                 mime_type="image/jpeg", message_id="m1", source_id="Cabc")
+    body = service.files().create.call_args.kwargs["body"]
+    assert body["appProperties"] == {"lineMessageId": "m1", "lineSourceId": "Cabc"}
+
+
 def test_load_mapping_empty_when_no_file():
     service = MagicMock()
     service.files().list().execute.return_value = {"files": []}

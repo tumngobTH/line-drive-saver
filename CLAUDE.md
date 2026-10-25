@@ -23,7 +23,12 @@ chat, filenames prefixed with the share date (yyyymmdd). See
 - Never commit `.env` or `service-account*.json`.
 - No new packages without approval.
 - All calls that touch Drive must pass supportsAllDrives / driveId flags.
-- Bot replies only on error or command; silent on successful save.
+- Bot replies only on error or command; silent on successful save. The error
+  notice is opt-out via `ERROR_REPLIES=false` (used by the `line-slip-saver`
+  service) — failures are then log-only.
+- With `SIDECAR_JSON=true` (default false; `line-slip-saver` only) every saved
+  media file gets a `<stem>.json` sidecar (groupId/userId/messageId/sourceId/
+  timestamp/type/filename). Sidecar is best-effort and must never undo the save.
 - Reply/notice language: Thai.
 
 ## Testing

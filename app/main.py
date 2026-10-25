@@ -47,6 +47,8 @@ def _startup() -> None:
         line=state.line,
         root_folder_id=settings.root_folder_id,
         max_file_mb=settings.max_file_mb,
+        error_replies=settings.error_replies,
+        sidecar_json=settings.sidecar_json,
     )
     logger.info("Startup complete; %d chats mapped", len(mapping.to_dict()))
 

@@ -31,3 +31,12 @@ def test_resolve_unique_appends_suffix_before_extension():
 
 def test_resolve_unique_returns_name_when_free():
     assert naming.resolve_unique("20260713_a.pdf", set()) == "20260713_a.pdf"
+
+
+def test_sidecar_name_replaces_extension_with_json():
+    assert naming.sidecar_name("20260713_153012_image.jpg") == "20260713_153012_image.json"
+    assert naming.sidecar_name("20260713_Q2-report.pdf") == "20260713_Q2-report.json"
+
+
+def test_sidecar_name_without_extension_appends_json():
+    assert naming.sidecar_name("20260713_README") == "20260713_README.json"

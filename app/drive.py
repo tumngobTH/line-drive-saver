@@ -81,6 +81,25 @@ class DriveStore:
         ).execute()
         return bool(resp.get("files"))
 
+    def upload_bytes(
+        self,
+        folder_id: str,
+        filename: str,
+        data: bytes,
+        mime_type: str,
+        app_properties: dict | None = None,
+    ) -> str:
+        """Create a file from in-memory bytes. Generic; no LINE tagging implied."""
+        # Small payloads: a single request (resumable needs two round trips).
+        media = MediaInMemoryUpload(data, mimetype=mime_type, resumable=False)
+        body = {"name": filename, "parents": [folder_id]}
+        if app_properties:
+            body["appProperties"] = app_properties
+        created = self.service.files().create(
+            body=body, media_body=media, fields="id", **_WRITE
+        ).execute()
+        return created["id"]
+
     def upload(
         self,
         folder_id: str,
@@ -90,18 +109,14 @@ class DriveStore:
         message_id: str,
         source_id: str,
     ) -> str:
-        media = MediaInMemoryUpload(data, mimetype=mime_type, resumable=True)
-        created = self.service.files().create(
-            body={
-                "name": filename,
-                "parents": [folder_id],
-                "appProperties": {"lineMessageId": message_id, "lineSourceId": source_id},
-            },
-            media_body=media,
-            fields="id",
-            **_WRITE,
-        ).execute()
-        return created["id"]
+        """Upload a LINE media file, tagged so exists_message() can find it."""
+        return self.upload_bytes(
+            folder_id=folder_id,
+            filename=filename,
+            data=data,
+            mime_type=mime_type,
+            app_properties={"lineMessageId": message_id, "lineSourceId": source_id},
+        )
 
     def _find_mapping_file_id(self, filename: str) -> str | None:
         q = (
