@@ -45,7 +45,7 @@ ngrok http 8000    # put https://<id>.ngrok.app/callback in the channel webhook 
 gcloud run deploy line-drive-saver \
   --source . \
   --region asia-southeast1 \
-  --min-instances 1 --max-instances 1 \
+  --min-instances 0 --max-instances 1 \
   --no-cpu-throttling \
   --set-env-vars SHARED_DRIVE_ID=...,ROOT_FOLDER_ID=...,MAPPING_FILENAME=line-drive-mapping.json \
   --set-secrets LINE_CHANNEL_SECRET=line-secret:latest,LINE_CHANNEL_ACCESS_TOKEN=line-token:latest,GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa.json:...
@@ -53,8 +53,12 @@ gcloud run deploy line-drive-saver \
 Then set the channel webhook URL to `https://<cloud-run-url>/callback`.
 
 > `--no-cpu-throttling` keeps the CPU allocated so background upload tasks finish
-> after the 200 response. `--min/max-instances 1` pins to one instance so the
-> mapping JSON never has concurrent writers.
+> after the 200 response. `--max-instances 1` pins to one instance so the
+> mapping JSON never has concurrent writers. `--min-instances 0` lets the service
+> scale to zero between messages (an always-on 1 vCPU instance costs ~US$54/month
+> in asia-southeast1; scale-to-zero is ~US$0 at a few photos a day). The first
+> webhook after idle waits ~2-3 s for a cold start; enable "webhook redelivery" in
+> the LINE console as a safety net.
 
 ## Sidecar JSON (opt-in: `SIDECAR_JSON=true`)
 When enabled, every saved media file gets a sibling `<same name>.json` in the same folder,
@@ -84,7 +88,7 @@ service is untouched.
 gcloud run deploy line-slip-saver \
   --source . \
   --region asia-southeast1 \
-  --min-instances 1 --max-instances 1 \
+  --min-instances 0 --max-instances 1 \
   --no-cpu-throttling \
   --set-env-vars SHARED_DRIVE_ID=...,ROOT_FOLDER_ID=<LINE Slips folder id>,MAPPING_FILENAME=line-slip-mapping.json,ERROR_REPLIES=false,SIDECAR_JSON=true \
   --set-secrets LINE_CHANNEL_SECRET=line-slip-secret:latest,LINE_CHANNEL_ACCESS_TOKEN=line-slip-token:latest,GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa.json:...
