@@ -13,6 +13,9 @@ FOLDER_MIME = "application/vnd.google-apps.folder"
 # create / update / get_media.
 _WRITE = {"supportsAllDrives": True}
 _LIST = {"supportsAllDrives": True, "includeItemsFromAllDrives": True}
+# Retry transient socket/SSL errors (EPIPE on a stale keep-alive after idle, ECONNRESET, 5xx)
+# with the client's built-in backoff; the default of 0 dropped the first slip after 3.5 h idle.
+RETRIES = 3
 
 
 def build_service(credentials_path: str):
@@ -48,7 +51,7 @@ class DriveStore:
         )
         resp = self.service.files().list(
             **self._list_kwargs(q, "files(id)")
-        ).execute()
+        ).execute(num_retries=RETRIES)
         files = resp.get("files", [])
         if files:
             return files[0]["id"]
@@ -56,19 +59,19 @@ class DriveStore:
             body={"name": name, "mimeType": FOLDER_MIME, "parents": [parent_id]},
             fields="id",
             **_WRITE,
-        ).execute()
+        ).execute(num_retries=RETRIES)
         return created["id"]
 
     def rename_folder(self, folder_id: str, new_name: str) -> None:
         self.service.files().update(
             fileId=folder_id, body={"name": new_name}, fields="id", **_WRITE
-        ).execute()
+        ).execute(num_retries=RETRIES)
 
     def list_names_in_folder(self, folder_id: str) -> set[str]:
         q = f"'{folder_id}' in parents and trashed = false"
         resp = self.service.files().list(
             **self._list_kwargs(q, "files(name)")
-        ).execute()
+        ).execute(num_retries=RETRIES)
         return {f["name"] for f in resp.get("files", [])}
 
     def exists_message(self, folder_id: str, message_id: str) -> bool:
@@ -78,7 +81,7 @@ class DriveStore:
         )
         resp = self.service.files().list(
             **self._list_kwargs(q, "files(id)")
-        ).execute()
+        ).execute(num_retries=RETRIES)
         return bool(resp.get("files"))
 
     def upload_bytes(
@@ -97,7 +100,7 @@ class DriveStore:
             body["appProperties"] = app_properties
         created = self.service.files().create(
             body=body, media_body=media, fields="id", **_WRITE
-        ).execute()
+        ).execute(num_retries=RETRIES)
         return created["id"]
 
     def upload(
@@ -125,7 +128,7 @@ class DriveStore:
         )
         resp = self.service.files().list(
             **self._list_kwargs(q, "files(id)")
-        ).execute()
+        ).execute(num_retries=RETRIES)
         files = resp.get("files", [])
         return files[0]["id"] if files else None
 
@@ -148,11 +151,11 @@ class DriveStore:
         if file_id:
             self.service.files().update(
                 fileId=file_id, media_body=media, fields="id", **_WRITE
-            ).execute()
+            ).execute(num_retries=RETRIES)
         else:
             self.service.files().create(
                 body={"name": filename, "parents": [self.root_folder_id]},
                 media_body=media,
                 fields="id",
                 **_WRITE,
-            ).execute()
+            ).execute(num_retries=RETRIES)

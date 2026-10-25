@@ -103,3 +103,16 @@ def test_list_flags_are_accepted_by_real_client():
     svc = _real_service()
     svc.files().list(q="x", fields="files(id)", corpora="drive",
                      driveId="0A", **drive._LIST)
+
+
+def test_drive_calls_retry_transient_errors():
+    from app.drive import DriveStore, RETRIES
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {"files": [{"id": "f1"}]}
+    store = DriveStore(service, "sd", "root")
+    assert store.ensure_folder("P", "root") == "f1"
+    service.files.return_value.list.return_value.execute.assert_called_once_with(num_retries=RETRIES)
+    service.files.return_value.create.return_value.execute.return_value = {"id": "x"}
+    store.upload_bytes("f1", "a.json", b"{}", "application/json")
+    service.files.return_value.create.return_value.execute.assert_called_once_with(num_retries=RETRIES)
+    assert RETRIES >= 1
