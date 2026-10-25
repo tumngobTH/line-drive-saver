@@ -39,8 +39,8 @@ def _startup() -> None:
     settings = get_settings()
     state.line = LineClient(settings.line_channel_secret, settings.line_channel_access_token)
     service = build_service(settings.google_application_credentials)
-    drive = DriveStore(service, settings.shared_drive_id, settings.root_folder_id)
-    mapping = Mapping(drive.load_mapping(settings.mapping_filename))
+    drive = DriveStore(service, settings.shared_drive_id, settings.root_folder_id, settings.mapping_filename)
+    mapping = Mapping(drive.load_mapping())
     state.deps = Deps(
         mapping=mapping,
         drive=drive,

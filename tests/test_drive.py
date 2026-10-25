@@ -116,3 +116,17 @@ def test_drive_calls_retry_transient_errors():
     store.upload_bytes("f1", "a.json", b"{}", "application/json")
     service.files.return_value.create.return_value.execute.assert_called_once_with(num_retries=RETRIES)
     assert RETRIES >= 1
+
+
+def test_save_mapping_uses_configured_filename_when_none_given():
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {"files": []}
+    service.files.return_value.create.return_value.execute.return_value = {"id": "m1"}
+    store = DriveStore(service, "sd", "root", mapping_filename="line-slip-mapping.json")
+    store.save_mapping({"Cabc": {"folderName": "P", "folderId": "f1"}})
+    body = service.files.return_value.create.call_args.kwargs["body"]
+    assert body["name"] == "line-slip-mapping.json"
+    assert body["parents"] == ["root"]
+    # and the lookup that decided "create, not update" searched for the same name
+    q = service.files.return_value.list.call_args.kwargs["q"]
+    assert "line-slip-mapping.json" in q

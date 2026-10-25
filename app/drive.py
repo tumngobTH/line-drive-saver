@@ -30,8 +30,9 @@ def _escape(value: str) -> str:
 
 
 class DriveStore:
-    def __init__(self, service, shared_drive_id: str, root_folder_id: str):
+    def __init__(self, service, shared_drive_id: str, root_folder_id: str, mapping_filename: str = "line-drive-mapping.json"):
         self.service = service
+        self.mapping_filename = mapping_filename  # one configured name for load AND save
         self.shared_drive_id = shared_drive_id
         self.root_folder_id = root_folder_id
 
@@ -132,7 +133,8 @@ class DriveStore:
         files = resp.get("files", [])
         return files[0]["id"] if files else None
 
-    def load_mapping(self, filename: str = "line-drive-mapping.json") -> dict:
+    def load_mapping(self, filename: str | None = None) -> dict:
+        filename = filename or self.mapping_filename
         file_id = self._find_mapping_file_id(filename)
         if not file_id:
             return {}
@@ -144,7 +146,8 @@ class DriveStore:
             _, done = downloader.next_chunk()
         return json.loads(buffer.getvalue().decode("utf-8") or "{}")
 
-    def save_mapping(self, data: dict, filename: str = "line-drive-mapping.json") -> None:
+    def save_mapping(self, data: dict, filename: str | None = None) -> None:
+        filename = filename or self.mapping_filename
         payload = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
         media = MediaInMemoryUpload(payload, mimetype="application/json")
         file_id = self._find_mapping_file_id(filename)
