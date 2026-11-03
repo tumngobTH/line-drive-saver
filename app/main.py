@@ -25,6 +25,14 @@ class _State:
 
 state = _State()
 
+_background_tasks: set = set()
+
+
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
 
 @app.on_event("startup")
 def _startup() -> None:
@@ -50,32 +58,18 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-async def _dispatch(events) -> None:
-    # Process every event WITHIN the request so the work finishes before we
-    # return 200. This lets Cloud Run run with CPU throttling on (billed per
-    # request) instead of CPU-always-allocated: a detached background task
-    # would be starved once the response returns.
-    coros = []
+def _dispatch(events) -> None:
     for event in events:
         if not isinstance(event, MessageEvent):
             continue
         msg_type = event.message.type
         if msg_type in MEDIA_TYPES:
-            coros.append(process_media_event(event, state.deps))
+            _spawn(process_media_event(event, state.deps))
         elif msg_type == "text":
             parsed = parse_command(event.message.text)
             if parsed:
                 verb, arg = parsed
-                coros.append(handle_command_event(verb, arg, event.source, state.deps))
-    if not coros:
-        return
-    # return_exceptions: a failing handler must never turn the webhook into a
-    # non-200 (LINE would retry the whole batch). Handlers log their own errors;
-    # anything that still escapes is logged here.
-    results = await asyncio.gather(*coros, return_exceptions=True)
-    for result in results:
-        if isinstance(result, Exception):
-            logger.error("Event handler raised", exc_info=result)
+                _spawn(handle_command_event(verb, arg, event.source, state.deps))
 
 
 @app.post("/callback")
@@ -85,5 +79,5 @@ async def callback(request: Request, x_line_signature: str = Header(default=""))
         events = state.line.parse(body, x_line_signature)
     except InvalidSignatureError:
         raise HTTPException(status_code=400, detail="invalid signature")
-    await _dispatch(events)
+    _dispatch(events)
     return {"status": "ok"}
